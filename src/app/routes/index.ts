@@ -2,7 +2,6 @@ import { Router } from 'express';
 import { UserRoutes } from '../modules/user/user.routes';
 import { AuthRoutes } from '../modules/auth/auth.route';
 import { PercelRout } from '../modules/percel/percel.route';
-import { OtpRoutes } from '../modules/otp/otp.route';
 import { dashboardRoute } from '../modules/dashboard/dashboard.route';
 
 
@@ -20,10 +19,6 @@ const moduleRoutes = [
   {
     path: '/parcel',
     route: PercelRout,
-  },
-  {
-    path: '/otp',
-    route: OtpRoutes,
   },
 
   {

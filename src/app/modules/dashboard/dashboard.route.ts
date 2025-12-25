@@ -6,6 +6,21 @@ import { dashboardController } from './dashboard.controller';
 
 const router = express.Router();
 
+// =============  SENDER DASHBOARD ROUTES =============
+
+router.get(
+  '/sender/stats',
+  checkAuth(Role.SENDER),
+  dashboardController.getSenderStats
+);
+
+router.get(
+  '/sender/parcels',
+  checkAuth(Role.SENDER, Role.RECEIVER, Role.ADMIN),
+  dashboardController.getSenderParcels
+);
+
+
 // ============= RECEIVER DASHBOARD ROUTES =============
 // Receiver dashboard stats
 router.get(

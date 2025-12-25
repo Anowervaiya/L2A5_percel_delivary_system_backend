@@ -5,18 +5,6 @@ import { ParcelController } from './percel.controller';
 
 const router = Router();
 
-// Dashboard routes
-router.get(
-  '/dashboard/stats',
-  checkAuth(...Object.values(Role)),
-  ParcelController.getDashboardStats
-);
-
-router.get(
-  '/dashboard/recent',
-  checkAuth(Role.SENDER, Role.RECEIVER, Role.ADMIN),
-  ParcelController.getRecentParcels
-);
 
 // Existing routes
 router.get(

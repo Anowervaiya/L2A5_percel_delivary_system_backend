@@ -113,19 +113,25 @@ const myParcel = catchAsync(
   }
 );
 
-const allParcel = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const result = await ParcelService.allParcel();
+const allParcel = catchAsync(async (req, res) => {
+  const { page = 1, limit = 8, status, search } = req.query;
 
-    sendResponse(res, {
-      success: true,
-      statusCode: httpStatus.ACCEPTED,
-      message: 'All parcel are retrieved succesfully',
-      data: result.data,
-      meta: result.meta,
-    });
-  }
-);
+  const result = await ParcelService.allParcel({
+    page: Number(page),
+    limit: Number(limit),
+    status: status as string | undefined,
+    search: search as string | undefined,
+  });
+
+  sendResponse(res, {
+    success: true,
+    statusCode: 200,
+    message: 'All parcels retrieved successfully',
+    data: result.data,
+    meta: result.meta,
+  });
+});
+
 
 const ParcelByTrackingId = catchAsync(
   async (req: Request, res: Response, next: NextFunction) => {
@@ -141,42 +147,6 @@ const ParcelByTrackingId = catchAsync(
   }
 );
 
-// Dashboard Controllers
-const getDashboardStats = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const user = req.user as JwtPayload;
-    const stats = await ParcelService.getDashboardStats(user);
-
-    sendResponse(res, {
-      success: true,
-      statusCode: httpStatus.OK,
-      message: 'Dashboard stats retrieved successfully',
-      data: stats,
-    });
-  }
-);
-
-const getRecentParcels = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const user = req.user as JwtPayload;
-    const { page = 1, limit = 10, status, search } = req.query;
-
-    const result = await ParcelService.getRecentParcels(user, {
-      page: Number(page),
-      limit: Number(limit),
-      status: status as string,
-      search: search as string,
-    });
-
-    sendResponse(res, {
-      success: true,
-      statusCode: httpStatus.OK,
-      message: 'Recent parcels retrieved successfully',
-      data: result.data,
-      meta: result.meta,
-    });
-  }
-);
 
 export const ParcelController = {
   createParcel,
@@ -187,7 +157,5 @@ export const ParcelController = {
   allParcel,
   confirmParcel,
   deleteParcel,
-  finterParcelByStatus,
-  getDashboardStats,
-  getRecentParcels,
+  finterParcelByStatus
 };

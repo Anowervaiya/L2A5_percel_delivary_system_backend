@@ -3,6 +3,11 @@ import AppError from '../../errorHelpers/appError';
 import { IParcel, ParcelStatus } from './percel.interface';
 import { Parcel } from './percel.model';
 import httpStatus from 'http-status-codes';
+interface IAllParcelQuery {
+  page?: number;
+  limit?: number;
+  search?: string;
+}
 
 const createParcel = async (user: JwtPayload, payload: Partial<IParcel>) => {
 
@@ -182,140 +187,26 @@ const myParcel = async (user: JwtPayload) => {
   return parcel;
 };
 
-const allParcel = async () => {
-  const parcel = await Parcel.find();
-  const totalParcel = await Parcel.countDocuments();
-
-  if (parcel.length === 0) {
-    throw new AppError(httpStatus.NO_CONTENT, 'No Parcel Found');
-  }
-
-  return {
-    data: parcel,
-    meta: {
-      total: totalParcel,
-    },
-  };
-};
-
-const ParcelByTrackingId = async (trackingId: string) => {
-  const parcel = await Parcel.findOne({ trackingId: trackingId });
-  return parcel;
-};
-
-const deleteParcel = async (id: string) => {
-  const parcel = await Parcel.findById(id);
-
-  if (!parcel) {
-    throw new AppError(httpStatus.BAD_REQUEST, 'parcel does not exist');
-  }
-
-  const result = await Parcel.findOneAndDelete({ _id: id });
-  return result;
-};
 
 
-// Dashboard Services
-const getDashboardStats = async (user: JwtPayload) => {
-  const userEmail = user?.email;
-  
-  // Total parcels
-  const totalParcels = await Parcel.countDocuments({ sender: userEmail });
-
-  // Status-wise count
-  const requested = await Parcel.countDocuments({
-    sender: userEmail,
-    currentStatus: ParcelStatus.REQUESTED,
-  });
-
-  const inTransit = await Parcel.countDocuments({
-    sender: userEmail,
-    currentStatus: ParcelStatus.IN_TRANSIT,
-  });
-
-  const delivered = await Parcel.countDocuments({
-    sender: userEmail,
-    currentStatus: ParcelStatus.DELIVERED,
-  });
-
-  // Monthly volume (last 6 months)
-  const sixMonthsAgo = new Date();
-  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-
-  const monthlyDataRaw = await Parcel.aggregate([
-    {
-      $match: {
-        sender: userEmail,
-        createdAt: { $gte: sixMonthsAgo },
-      },
-    },
-    {
-      $group: {
-        _id: {
-          year: { $year: '$createdAt' },
-          month: { $month: '$createdAt' },
-        },
-        count: { $sum: 1 },
-      },
-    },
-    {
-      $sort: { '_id.year': 1, '_id.month': 1 },
-    },
-  ]);
-
-  // ✅ Format করা - Frontend এর জন্য ready
-  const monthNames = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-  ];
-
-  const monthlyData = monthlyDataRaw.map(item => ({
-    month: monthNames[item._id.month - 1], // 1 → "January"
-    parcels: item.count
-  }));
-
-  // Status distribution
-  const statusDistributionRaw = await Parcel.aggregate([
-    { $match: { sender: userEmail } },
-    {
-      $group: {
-        _id: '$currentStatus',
-        count: { $sum: 1 },
-      },
-    },
-  ]);
-
-  // ✅ Status distribution ও format করা
-  const statusDistribution = statusDistributionRaw.map(item => ({
-    name: item?._id?.toLowerCase(),
-    value: item.count,
-  }));
-
-  return {
-    totalParcels,
-    requested,
-    inTransit,
-    delivered,
-    monthlyData,        // ✅ Already formatted: [{ month: "July", parcels: 240 }]
-    statusDistribution, // ✅ Already formatted: [{ name: "DELIVERED", value: 10 }]
-  };
-};
-
-interface RecentParcelsQuery {
-  page: number;
-  limit: number;
-  status?: string;
-  search?: string;
-}
-
-const getRecentParcels = async (user: JwtPayload, query: RecentParcelsQuery) => {
+const allParcel = async (query: any) => {
   const { page, limit, status, search } = query;
-  const userEmail = user?.email;
 
-  const filter: any = { sender: userEmail };
+  const filter: any = {};
 
-  if (status) filter.currentStatus = status;
-  if (search) filter.trackingId = { $regex: search, $options: 'i' };
+  // 🔹 Status filter
+  if (status) {
+    filter.currentStatus = status;
+  }
+
+  // 🔹 Search (trackingId, sender, receiver)
+  if (search) {
+    filter.$or = [
+      { trackingId: { $regex: search, $options: 'i' } },
+      { sender: { $regex: search, $options: 'i' } },
+      { receiver: { $regex: search, $options: 'i' } },
+    ];
+  }
 
   const parcels = await Parcel.find(filter)
     .sort({ createdAt: -1 })
@@ -335,6 +226,25 @@ const getRecentParcels = async (user: JwtPayload, query: RecentParcelsQuery) => 
   };
 };
 
+
+const ParcelByTrackingId = async (trackingId: string) => {
+  const parcel = await Parcel.findOne({ trackingId: trackingId });
+  return parcel;
+};
+
+const deleteParcel = async (id: string) => {
+  const parcel = await Parcel.findById(id);
+
+  if (!parcel) {
+    throw new AppError(httpStatus.BAD_REQUEST, 'parcel does not exist');
+  }
+
+  const result = await Parcel.findOneAndDelete({ _id: id });
+  return result;
+};
+
+
+
 export const ParcelService = {
   createParcel,
   cancelParcel,
@@ -344,7 +254,6 @@ export const ParcelService = {
   allParcel,
   confirmParcel,
   deleteParcel,
-  finterParcelByStatus,
-  getDashboardStats,
-  getRecentParcels,
+  finterParcelByStatus
+
 };

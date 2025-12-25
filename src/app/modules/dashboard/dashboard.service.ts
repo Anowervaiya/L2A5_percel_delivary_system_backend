@@ -60,6 +60,127 @@ interface SystemMetrics {
   activeNow: number;
 }
 
+// ============= SENDER DASHBOARD METHODS =============
+const getSenderStats = async (user: JwtPayload) => {
+  const userEmail = user?.email;
+
+  // Total parcels
+  const totalParcels = await Parcel.countDocuments({ sender: userEmail });
+
+  // Status-wise count
+  const requested = await Parcel.countDocuments({
+    sender: userEmail,
+    currentStatus: ParcelStatus.REQUESTED,
+  });
+
+  const inTransit = await Parcel.countDocuments({
+    sender: userEmail,
+    currentStatus: ParcelStatus.IN_TRANSIT,
+  });
+
+  const delivered = await Parcel.countDocuments({
+    sender: userEmail,
+    currentStatus: ParcelStatus.DELIVERED,
+  });
+
+  // Monthly volume (last 6 months)
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+  const monthlyDataRaw = await Parcel.aggregate([
+    {
+      $match: {
+        sender: userEmail,
+        createdAt: { $gte: sixMonthsAgo },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          year: { $year: '$createdAt' },
+          month: { $month: '$createdAt' },
+        },
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $sort: { '_id.year': 1, '_id.month': 1 },
+    },
+  ]);
+
+  // ✅ Format করা - Frontend এর জন্য ready
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const monthlyData = monthlyDataRaw.map(item => ({
+    month: monthNames[item._id.month - 1], // 1 → "January"
+    parcels: item.count
+  }));
+
+  // Status distribution
+  const statusDistributionRaw = await Parcel.aggregate([
+    { $match: { sender: userEmail } },
+    {
+      $group: {
+        _id: '$currentStatus',
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  // ✅ Status distribution ও format করা
+  const statusDistribution = statusDistributionRaw.map(item => ({
+    name: item?._id?.toLowerCase(),
+    value: item.count,
+  }));
+
+  return {
+    totalParcels,
+    requested,
+    inTransit,
+    delivered,
+    monthlyData,        // ✅ Already formatted: [{ month: "July", parcels: 240 }]
+    statusDistribution, // ✅ Already formatted: [{ name: "DELIVERED", value: 10 }]
+  };
+};
+
+interface RecentsenderParcelsQuery {
+  page: number;
+  limit: number;
+  status?: string;
+  search?: string;
+}
+
+const getSenderParcels = async (user: JwtPayload, query: RecentsenderParcelsQuery) => {
+  const { page, limit, status, search } = query;
+  const userEmail = user?.email;
+
+  const filter: any = { sender: userEmail };
+
+  if (status) filter.currentStatus = status;
+  if (search) filter.trackingId = { $regex: search, $options: 'i' };
+
+  const parcels = await Parcel.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .skip((page - 1) * limit);
+
+  const total = await Parcel.countDocuments(filter);
+
+  return {
+    data: parcels,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+};
+
+
 // ============= RECEIVER DASHBOARD METHODS =============
 const getReceiverDashboardStats = async (
   user: JwtPayload
@@ -69,8 +190,8 @@ const getReceiverDashboardStats = async (
   // Incoming parcels (In Transit + Dispatched)
   const incomingParcels = await Parcel.countDocuments({
     receiver: userEmail,
-    currentStatus: { 
-      $in: [ParcelStatus.IN_TRANSIT, ParcelStatus.DISPATCHED, ParcelStatus.APPROVED] 
+    currentStatus: {
+      $in: [ParcelStatus.IN_TRANSIT, ParcelStatus.DISPATCHED, ParcelStatus.APPROVED]
     },
   });
 
@@ -226,7 +347,7 @@ const getAdminOverviewStats = async (): Promise<OverviewStats> => {
 
   // Total parcels
   const totalParcels = await Parcel.countDocuments();
-  
+
   const totalUsers = await User.countDocuments();
 
   // Pending deliveries
@@ -250,9 +371,9 @@ const getAdminOverviewStats = async (): Promise<OverviewStats> => {
     }
   ]);
 
- 
+
   const currentRevenue = revenueThisMonthData[0]?.total || 0;
-  
+
 
   return {
     totalParcels,
@@ -288,7 +409,7 @@ const getAdminParcelTrends = async (days: number = 90): Promise<ParcelTrendData[
 
   // Transform data
   const dataMap = new Map<string, ParcelTrendData>();
-  
+
   trends.forEach(item => {
     const date = item._id.date;
     if (!dataMap.has(date)) {
@@ -299,7 +420,7 @@ const getAdminParcelTrends = async (days: number = 90): Promise<ParcelTrendData[
         pending: 0
       });
     }
-    
+
     const data = dataMap.get(date)!;
     if (item._id.status === ParcelStatus.DELIVERED) data.delivered = item.count;
     else if (item._id.status === ParcelStatus.IN_TRANSIT) data.transit = item.count;
@@ -390,7 +511,7 @@ const getAdminRevenueGrowth = async (months: number = 12): Promise<RevenueData[]
 
   // Create array of all months
   const result: RevenueData[] = [];
-  
+
   for (let i = 0; i < months; i++) {
     const date = new Date(now.getFullYear(), now.getMonth() - months + 1 + i, 1);
     const monthData = revenueData.find(
@@ -450,8 +571,8 @@ const getAdminSystemMetrics = async (): Promise<SystemMetrics> => {
 
   // Success rate
   const totalParcels = await Parcel.countDocuments();
-  const successfulDeliveries = await Parcel.countDocuments({ 
-    currentStatus: ParcelStatus.DELIVERED 
+  const successfulDeliveries = await Parcel.countDocuments({
+    currentStatus: ParcelStatus.DELIVERED
   });
   const successRate = totalParcels > 0
     ? ((successfulDeliveries / totalParcels) * 100).toFixed(1)
@@ -491,10 +612,14 @@ const getAdminSystemMetrics = async (): Promise<SystemMetrics> => {
 };
 
 export const dashboardService = {
+  //sender methods
+  getSenderStats,
+  getSenderParcels,
+
   // Receiver methods
   getReceiverDashboardStats,
   getIncomingParcels,
-  
+
   // Admin methods
   getAdminOverviewStats,
   getAdminParcelTrends,

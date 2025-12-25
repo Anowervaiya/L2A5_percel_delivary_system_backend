@@ -1,11 +1,50 @@
 // controllers/receiverDashboard.controller.ts
-import { Request, Response } from 'express';
+import { NextFunction, Request, Response } from 'express';
 import { dashboardService } from './dashboard.service';
 import { sendResponse } from '../../utils/sendResponse';
 import { catchAsync } from '../../utils/catchAsync';
 import { JwtPayload } from 'jsonwebtoken';
 
- const getReceiverStats = catchAsync(
+
+// Dashboard Controllers
+const getSenderStats = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user as JwtPayload;
+    const stats = await dashboardService.getSenderStats(user);
+
+    sendResponse(res, {
+      success: true,
+      statusCode: 200,
+      message: 'sender stats retrieved successfully',
+      data: stats,
+    });
+  }
+);
+
+const getSenderParcels = catchAsync(
+  async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user as JwtPayload;
+    const { page = 1, limit = 10, status, search } = req.query;
+
+    const result = await dashboardService.getSenderParcels(user, {
+      page: Number(page),
+      limit: Number(limit),
+      status: status as string,
+      search: search as string,
+    });
+
+    sendResponse(res, {
+      success: true,
+      statusCode: 200,
+      message: 'sender parcels retrieved successfully',
+      data: result.data,
+      meta: result.meta,
+    });
+  }
+);
+
+
+const getReceiverStats = catchAsync(
   async (req: Request, res: Response) => {
     const user = req.user as JwtPayload; // From auth middleware
 
@@ -20,7 +59,7 @@ import { JwtPayload } from 'jsonwebtoken';
   }
 );
 
- const getReceiverParcels = catchAsync(
+const getReceiverParcels = catchAsync(
   async (req: Request, res: Response) => {
     const user = req.user as JwtPayload;
     const { page, limit, status, search } = req.query;
@@ -116,10 +155,13 @@ const getSystemMetrics = catchAsync(
   }
 );
 export const dashboardController = {
-    getReceiverStats,
-    getReceiverParcels,
+  getSenderStats,
+  getSenderParcels,
 
-    getAdminOverview,
+  getReceiverStats,
+  getReceiverParcels,
+
+  getAdminOverview,
   getParcelTrends,
   getDistrictDistribution,
   getRevenueGrowth,

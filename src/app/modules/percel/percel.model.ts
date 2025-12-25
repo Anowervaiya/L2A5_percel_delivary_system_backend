@@ -1,5 +1,6 @@
 import { model, Schema } from "mongoose";
 import { IParcel, ParcelStatus } from "./percel.interface";
+import { BangladeshDivision } from "./percel.constant";
 
 const statusLogSchema = new Schema(
   {
@@ -19,11 +20,19 @@ const parcelSchema = new Schema<IParcel>({
   fee: { type: Number, default: 130 },
   sender: { type: String, ref: 'User', required: true },
   receiver: { type: String, ref: 'User', required: true },
+deliveryLocation: {
+      type: String,
+      enum: Object.values(BangladeshDivision),
+      required: true,
+    },
   deliveryAddress: { type: String, required: true },
   deliveryDate: { type: Date, required: true },
   currentStatus: { type: String, default: ParcelStatus.REQUESTED },
   statusLogs: [statusLogSchema],
   isBlocked: { type: Boolean, default: false },
   isCancelled: { type: Boolean, default: false },
-});
+},  {
+    timestamps: true,  // ✅ এটা add করুন
+    versionKey: false,
+  });
 export const Parcel = model('Parcel', parcelSchema);

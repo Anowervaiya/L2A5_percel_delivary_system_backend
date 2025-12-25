@@ -15,6 +15,7 @@ const credentialsLogin = catchAsync(async (req: Request, res: Response, next: Ne
   passport.authenticate('local', async (err: any, user: any, info: any) => {
 
     if (err) {
+      console.log(err)
       return next(new AppError(401, err));
     }
 

@@ -1,21 +1,17 @@
-import { JwtPayload } from "jsonwebtoken";
-import AppError from "../../errorHelpers/appError";
-import { sendResponse } from "../../utils/sendResponse";
-import { IUser } from "../user/user.interfaces";
-import { User } from "../user/user.model";
-import { IParcel, ParcelStatus } from "./percel.interface";
-import { Parcel } from "./percel.model";
-import httpStatus from 'http-status-codes'
+import { JwtPayload } from 'jsonwebtoken';
+import AppError from '../../errorHelpers/appError';
+import { IParcel, ParcelStatus } from './percel.interface';
+import { Parcel } from './percel.model';
+import httpStatus from 'http-status-codes';
 
 const createParcel = async (user: JwtPayload, payload: Partial<IParcel>) => {
-  const trackingId = `trackId_${Date.now()}_${Math.floor(Math.random() * 1000)}`
- 
 
+
+  const trackingId = `trackId_${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 
   const info = {
-
     ...payload,
-     sender : user?.email,
+    sender: user?.email,
     trackingId,
     statusLogs: [
       {
@@ -27,24 +23,21 @@ const createParcel = async (user: JwtPayload, payload: Partial<IParcel>) => {
   };
 
   const parcel = await Parcel.create(info);
-
   return parcel;
 };
 
 const cancelParcel = async (id: string, user: any) => {
-  
   const parcel = await Parcel.findById(id);
   if (!parcel) {
     throw new AppError(httpStatus.BAD_REQUEST, 'parcel does not exist');
   }
 
   const finalStatus = parcel.statusLogs?.find(
-    statusLog =>
+    (statusLog) =>
       statusLog.status === ParcelStatus.DISPATCHED ||
       statusLog.status === ParcelStatus.IN_TRANSIT ||
       statusLog.status === ParcelStatus.DELIVERED ||
-      statusLog.status === ParcelStatus.CANCELLED 
-      
+      statusLog.status === ParcelStatus.CANCELLED
   );
 
   if (finalStatus) {
@@ -53,10 +46,6 @@ const cancelParcel = async (id: string, user: any) => {
       `The parcel is already ${finalStatus.status}. You can't cancel it now.`
     );
   }
-
-
-
-
 
   const changableParcel = await Parcel.findByIdAndUpdate(
     id,
@@ -77,31 +66,30 @@ const cancelParcel = async (id: string, user: any) => {
 
   return changableParcel;
 };
+
 const confirmParcel = async (id: string, user: any) => {
   const parcel = await Parcel.findById(id);
   if (!parcel) {
     throw new AppError(httpStatus.BAD_REQUEST, 'parcel does not exist');
   }
 
-  
-
   if (
-    parcel.statusLogs?.some(status => status.status === ParcelStatus.CANCELLED )
+    parcel.statusLogs?.some((status) => status.status === ParcelStatus.CANCELLED)
   ) {
     throw new AppError(
       httpStatus.BAD_GATEWAY,
       "parcel is already cancelled .. you can't change the status"
     );
   }
+
   if (
-    parcel.statusLogs?.some(status => status.status === ParcelStatus.DELIVERED )
+    parcel.statusLogs?.some((status) => status.status === ParcelStatus.DELIVERED)
   ) {
     throw new AppError(
       httpStatus.BAD_GATEWAY,
       "parcel is already delivered .. you can't change the status"
     );
   }
-
 
   const changableParcel = await Parcel.findByIdAndUpdate(
     id,
@@ -124,19 +112,11 @@ const confirmParcel = async (id: string, user: any) => {
 };
 
 const finterParcelByStatus = async (status: string) => {
+  const filteredParcel = await Parcel.find({ currentStatus: status });
 
-  
-  const filteredParcel = await Parcel.find({ currentStatus: status })
-
-
-   if (filteredParcel.length === 0) {
-     throw new AppError(403, `No parcel found in the status of ${status}`);
-   }
-  
-
- 
-
-  
+  if (filteredParcel.length === 0) {
+    throw new AppError(403, `No parcel found in the status of ${status}`);
+  }
 
   return {
     data: filteredParcel,
@@ -144,24 +124,31 @@ const finterParcelByStatus = async (status: string) => {
       total: filteredParcel?.length,
     },
   };
-}
+};
 
 const changeParcelStatus = async (payload: any) => {
-
-  const parcel = await Parcel.findById( payload.id )
+  const parcel = await Parcel.findById(payload.id);
   if (!parcel) {
-    throw new AppError ( httpStatus.BAD_REQUEST,"parcel does not exist")
+    throw new AppError(httpStatus.BAD_REQUEST, 'parcel does not exist');
   }
 
-  if (parcel.statusLogs?.some(status => status.status === ParcelStatus.CANCELLED)) {
-    
-    throw new AppError(httpStatus.BAD_GATEWAY, "parcel is cancelled .. you can't change the status")
-  }
-  
-  if (parcel.statusLogs?.some(singleStatus => singleStatus.status === payload.status)) {
-    throw new AppError(httpStatus.BAD_GATEWAY, `You have already ${payload.status} this parcel`);
+  if (
+    parcel.statusLogs?.some((status) => status.status === ParcelStatus.CANCELLED)
+  ) {
+    throw new AppError(
+      httpStatus.BAD_GATEWAY,
+      "parcel is cancelled .. you can't change the status"
+    );
   }
 
+  if (
+    parcel.statusLogs?.some((singleStatus) => singleStatus.status === payload.status)
+  ) {
+    throw new AppError(
+      httpStatus.BAD_GATEWAY,
+      `You have already ${payload.status} this parcel`
+    );
+  }
 
   const changableParcel = await Parcel.findByIdAndUpdate(
     payload.id,
@@ -182,34 +169,26 @@ const changeParcelStatus = async (payload: any) => {
 
   return changableParcel;
 };
-const myParcel = async (user : JwtPayload) => {
- 
 
-  const sendedParcel = await Parcel.find({ sender: user?.email })
-  const receivedParcel = await Parcel.find({ receiver: user?.email })
+const myParcel = async (user: JwtPayload) => {
+  const sendedParcel = await Parcel.find({ sender: user?.email });
+  const receivedParcel = await Parcel.find({ receiver: user?.email });
 
   if (sendedParcel.length === 0 && receivedParcel.length === 0) {
     throw new AppError(httpStatus.BAD_REQUEST, 'No parcels found');
   }
 
   const parcel = { sendedParcel, receivedParcel };
-
   return parcel;
 };
+
 const allParcel = async () => {
-  
-
-  const parcel = await Parcel.find()
-  
-  
-
+  const parcel = await Parcel.find();
   const totalParcel = await Parcel.countDocuments();
-  
-  if (parcel.length === 0) {
-    throw new AppError( httpStatus.NO_CONTENT,'No Parcel Found')
-  }
 
- 
+  if (parcel.length === 0) {
+    throw new AppError(httpStatus.NO_CONTENT, 'No Parcel Found');
+  }
 
   return {
     data: parcel,
@@ -217,13 +196,13 @@ const allParcel = async () => {
       total: totalParcel,
     },
   };
-  
 };
-const ParcelByTrackingId = async (trackingId: string) => {
-  const parcel = await Parcel.findOne({trackingId: trackingId });
 
+const ParcelByTrackingId = async (trackingId: string) => {
+  const parcel = await Parcel.findOne({ trackingId: trackingId });
   return parcel;
 };
+
 const deleteParcel = async (id: string) => {
   const parcel = await Parcel.findById(id);
 
@@ -234,6 +213,128 @@ const deleteParcel = async (id: string) => {
   const result = await Parcel.findOneAndDelete({ _id: id });
   return result;
 };
+
+
+// Dashboard Services
+const getDashboardStats = async (user: JwtPayload) => {
+  const userEmail = user?.email;
+  
+  // Total parcels
+  const totalParcels = await Parcel.countDocuments({ sender: userEmail });
+
+  // Status-wise count
+  const requested = await Parcel.countDocuments({
+    sender: userEmail,
+    currentStatus: ParcelStatus.REQUESTED,
+  });
+
+  const inTransit = await Parcel.countDocuments({
+    sender: userEmail,
+    currentStatus: ParcelStatus.IN_TRANSIT,
+  });
+
+  const delivered = await Parcel.countDocuments({
+    sender: userEmail,
+    currentStatus: ParcelStatus.DELIVERED,
+  });
+
+  // Monthly volume (last 6 months)
+  const sixMonthsAgo = new Date();
+  sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+  const monthlyDataRaw = await Parcel.aggregate([
+    {
+      $match: {
+        sender: userEmail,
+        createdAt: { $gte: sixMonthsAgo },
+      },
+    },
+    {
+      $group: {
+        _id: {
+          year: { $year: '$createdAt' },
+          month: { $month: '$createdAt' },
+        },
+        count: { $sum: 1 },
+      },
+    },
+    {
+      $sort: { '_id.year': 1, '_id.month': 1 },
+    },
+  ]);
+
+  // ✅ Format করা - Frontend এর জন্য ready
+  const monthNames = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+  ];
+
+  const monthlyData = monthlyDataRaw.map(item => ({
+    month: monthNames[item._id.month - 1], // 1 → "January"
+    parcels: item.count
+  }));
+
+  // Status distribution
+  const statusDistributionRaw = await Parcel.aggregate([
+    { $match: { sender: userEmail } },
+    {
+      $group: {
+        _id: '$currentStatus',
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+
+  // ✅ Status distribution ও format করা
+  const statusDistribution = statusDistributionRaw.map(item => ({
+    name: item?._id?.toLowerCase(),
+    value: item.count,
+  }));
+
+  return {
+    totalParcels,
+    requested,
+    inTransit,
+    delivered,
+    monthlyData,        // ✅ Already formatted: [{ month: "July", parcels: 240 }]
+    statusDistribution, // ✅ Already formatted: [{ name: "DELIVERED", value: 10 }]
+  };
+};
+
+interface RecentParcelsQuery {
+  page: number;
+  limit: number;
+  status?: string;
+  search?: string;
+}
+
+const getRecentParcels = async (user: JwtPayload, query: RecentParcelsQuery) => {
+  const { page, limit, status, search } = query;
+  const userEmail = user?.email;
+
+  const filter: any = { sender: userEmail };
+
+  if (status) filter.currentStatus = status;
+  if (search) filter.trackingId = { $regex: search, $options: 'i' };
+
+  const parcels = await Parcel.find(filter)
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .skip((page - 1) * limit);
+
+  const total = await Parcel.countDocuments(filter);
+
+  return {
+    data: parcels,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+};
+
 export const ParcelService = {
   createParcel,
   cancelParcel,
@@ -244,4 +345,6 @@ export const ParcelService = {
   confirmParcel,
   deleteParcel,
   finterParcelByStatus,
+  getDashboardStats,
+  getRecentParcels,
 };

@@ -5,11 +5,26 @@ import { ParcelController } from './percel.controller';
 
 const router = Router();
 
+// Dashboard routes
+router.get(
+  '/dashboard/stats',
+  checkAuth(...Object.values(Role)),
+  ParcelController.getDashboardStats
+);
+
+router.get(
+  '/dashboard/recent',
+  checkAuth(Role.SENDER, Role.RECEIVER, Role.ADMIN),
+  ParcelController.getRecentParcels
+);
+
+// Existing routes
 router.get(
   '/my-parcel',
   checkAuth(Role.RECEIVER, Role.SENDER),
   ParcelController.myParcel
 );
+
 router.get('/all-parcel', checkAuth(Role.ADMIN), ParcelController.allParcel);
 
 router.post(
@@ -38,7 +53,7 @@ router.patch(
 
 router.patch(
   '/confirm/:id',
-  checkAuth(Role.RECEIVER),
+  checkAuth(Role.RECEIVER, Role.SENDER) ,
   ParcelController.confirmParcel
 );
 

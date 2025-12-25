@@ -50,10 +50,10 @@ passport.use(
           return done(null, false, { message: 'Password does not match' });
         }
 
-        if (!isUserExist.isVerified) {
-          // throw new AppError(httpStatus.BAD_REQUEST, "User is not verified")
-          return done('User is not verified');
-        }
+        // if (!isUserExist.isVerified) {
+        //   // throw new AppError(httpStatus.BAD_REQUEST, "User is not verified")
+        //   return done('User is not verified');
+        // }
         return done(null, isUserExist);
       } catch (error) {
         console.log(error);

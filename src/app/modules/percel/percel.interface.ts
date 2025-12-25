@@ -1,4 +1,5 @@
 import { Types } from "mongoose";
+import { BangladeshDivision } from "./percel.constant";
 
 export enum ParcelStatus{
   REQUESTED = 'REQUESTED',
@@ -27,6 +28,7 @@ export  interface IParcel {
   fee: number;
   sender: string;
   receiver: string;
+  deliveryLocation: BangladeshDivision;
   deliveryAddress: string;
   deliveryDate: Date;
   currentStatus?: string;

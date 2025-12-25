@@ -35,4 +35,6 @@ export  interface IParcel {
   statusLogs?: IParcelStatusLog[];
   isBlocked?: boolean;
   isCancelled?: boolean;
+  createdAt?:Date;
+  updatedAt?:Date;
 }

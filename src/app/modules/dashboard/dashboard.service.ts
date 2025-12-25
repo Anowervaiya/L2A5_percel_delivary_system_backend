@@ -1,9 +1,11 @@
-// services/receiverDashboard.service.ts
+// services/dashboard.service.ts
 
 import { JwtPayload } from "jsonwebtoken";
 import { Parcel } from "../percel/percel.model";
 import { ParcelStatus } from "../percel/percel.interface";
+import { User } from "../user/user.model";
 
+// ============= RECEIVER DASHBOARD INTERFACES =============
 interface MonthlyDataItem {
   month: string;
   deliveries: number;
@@ -23,7 +25,43 @@ interface ReceiverDashboardStats {
   locationDistribution: LocationDataItem[];
 }
 
- const getReceiverDashboardStats = async (
+// ============= ADMIN DASHBOARD INTERFACES =============
+interface OverviewStats {
+  totalParcels: number;
+  totalUsers: number;
+  pendingDeliveries: number;
+  revenueThisMonth: number;
+}
+
+interface ParcelTrendData {
+  day: string;
+  delivered: number;
+  transit: number;
+  pending: number;
+}
+
+interface DistrictData {
+  district: string;
+  delivered: number;
+  transit: number;
+  pending: number;
+}
+
+interface RevenueData {
+  month: string;
+  revenue?: number;
+  projection?: number;
+}
+
+interface SystemMetrics {
+  avgDeliveryTime: string;
+  successRate: string;
+  peakHours: string;
+  activeNow: number;
+}
+
+// ============= RECEIVER DASHBOARD METHODS =============
+const getReceiverDashboardStats = async (
   user: JwtPayload
 ): Promise<ReceiverDashboardStats> => {
   const userEmail = user?.email;
@@ -32,7 +70,7 @@ interface ReceiverDashboardStats {
   const incomingParcels = await Parcel.countDocuments({
     receiver: userEmail,
     currentStatus: { 
-      $in: [ParcelStatus.IN_TRANSIT, ParcelStatus.DISPATCHED , ParcelStatus.APPROVED] 
+      $in: [ParcelStatus.IN_TRANSIT, ParcelStatus.DISPATCHED, ParcelStatus.APPROVED] 
     },
   });
 
@@ -47,11 +85,10 @@ interface ReceiverDashboardStats {
     updatedAt: { $gte: startOfMonth },
   });
 
-  // Pending confirmation (Delivered but not confirmed by receiver)
+  // Pending confirmation
   const pendingConfirmation = await Parcel.countDocuments({
     receiver: userEmail,
     currentStatus: ParcelStatus.REQUESTED,
-    // Add a field in your schema to track confirmation if needed
   });
 
   // Total received
@@ -118,13 +155,11 @@ interface ReceiverDashboardStats {
     },
   ]);
 
-  // Calculate total for percentage
   const totalDeliveries = locationDistributionRaw.reduce(
     (sum, item) => sum + item.count,
     0
   );
 
-  // Format location distribution with percentages
   const locationDistribution: LocationDataItem[] = locationDistributionRaw.map(
     (item) => ({
       name: item._id || 'Unknown',
@@ -142,8 +177,7 @@ interface ReceiverDashboardStats {
   };
 };
 
-// Get recent incoming parcels
- const getIncomingParcels = async (
+const getIncomingParcels = async (
   user: JwtPayload,
   params: {
     page?: number;
@@ -157,13 +191,10 @@ interface ReceiverDashboardStats {
 
   const query: any = { receiver: userEmail };
 
-  // Status filter
   if (status && status !== 'all') {
     query.currentStatus = status.toUpperCase();
   }
 
-
-  // Search filter
   if (search) {
     query.$or = [
       { trackingId: { $regex: search, $options: 'i' } },
@@ -188,7 +219,286 @@ interface ReceiverDashboardStats {
   };
 };
 
-export const dashboardService ={
-    getReceiverDashboardStats,
-getIncomingParcels
-}
+// ============= ADMIN DASHBOARD METHODS =============
+const getAdminOverviewStats = async (): Promise<OverviewStats> => {
+  const now = new Date();
+  const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+  // Total parcels
+  const totalParcels = await Parcel.countDocuments();
+  
+  const totalUsers = await User.countDocuments();
+
+  // Pending deliveries
+  const pendingDeliveries = await Parcel.countDocuments({
+    currentStatus: { $in: [ParcelStatus.APPROVED, ParcelStatus.IN_TRANSIT] }
+  });
+
+  // Revenue this month (sum of fees from delivered parcels)
+  const revenueThisMonthData = await Parcel.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startOfMonth },
+        currentStatus: ParcelStatus.DELIVERED
+      }
+    },
+    {
+      $group: {
+        _id: null,
+        total: { $sum: '$fee' }
+      }
+    }
+  ]);
+
+ 
+  const currentRevenue = revenueThisMonthData[0]?.total || 0;
+  
+
+  return {
+    totalParcels,
+    totalUsers,
+    pendingDeliveries,
+    revenueThisMonth: currentRevenue
+  };
+};
+
+const getAdminParcelTrends = async (days: number = 90): Promise<ParcelTrendData[]> => {
+  const now = new Date();
+  const startDate = new Date(now.getTime() - days * 24 * 60 * 60 * 1000);
+
+  const trends = await Parcel.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startDate }
+      }
+    },
+    {
+      $group: {
+        _id: {
+          date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt' } },
+          status: '$currentStatus'
+        },
+        count: { $sum: 1 }
+      }
+    },
+    {
+      $sort: { '_id.date': 1 }
+    }
+  ]);
+
+  // Transform data
+  const dataMap = new Map<string, ParcelTrendData>();
+  
+  trends.forEach(item => {
+    const date = item._id.date;
+    if (!dataMap.has(date)) {
+      dataMap.set(date, {
+        day: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        delivered: 0,
+        transit: 0,
+        pending: 0
+      });
+    }
+    
+    const data = dataMap.get(date)!;
+    if (item._id.status === ParcelStatus.DELIVERED) data.delivered = item.count;
+    else if (item._id.status === ParcelStatus.IN_TRANSIT) data.transit = item.count;
+    else if (item._id.status === ParcelStatus.REQUESTED) data.pending = item.count;
+  });
+
+  return Array.from(dataMap.values());
+};
+
+const getAdminDistrictDistribution = async (limit: number = 10): Promise<DistrictData[]> => {
+  const distribution = await Parcel.aggregate([
+    {
+      $group: {
+        _id: {
+          district: '$deliveryLocation', // Adjust field name as per your schema
+          status: '$currentStatus'
+        },
+        count: { $sum: 1 }
+      }
+    },
+    {
+      $group: {
+        _id: '$_id.district',
+        delivered: {
+          $sum: {
+            $cond: [{ $eq: ['$_id.status', ParcelStatus.DELIVERED] }, '$count', 0]
+          }
+        },
+        transit: {
+          $sum: {
+            $cond: [{ $eq: ['$_id.status', ParcelStatus.IN_TRANSIT] }, '$count', 0]
+          }
+        },
+        pending: {
+          $sum: {
+            $cond: [{ $eq: ['$_id.status', ParcelStatus.REQUESTED] }, '$count', 0]
+          }
+        },
+        total: { $sum: '$count' }
+      }
+    },
+    {
+      $sort: { total: -1 }
+    },
+    {
+      $limit: limit
+    },
+    {
+      $project: {
+        _id: 0,
+        district: '$_id',
+        delivered: 1,
+        transit: 1,
+        pending: 1
+      }
+    }
+  ]);
+
+  return distribution;
+};
+
+const getAdminRevenueGrowth = async (months: number = 12): Promise<RevenueData[]> => {
+  const now = new Date();
+  const startDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  // Get revenue data from delivered parcels
+  const revenueData = await Parcel.aggregate([
+    {
+      $match: {
+        createdAt: { $gte: startDate },
+        currentStatus: ParcelStatus.DELIVERED
+      }
+    },
+    {
+      $group: {
+        _id: {
+          year: { $year: '$createdAt' },
+          month: { $month: '$createdAt' }
+        },
+        revenue: { $sum: '$fee' }
+      }
+    },
+    {
+      $sort: { '_id.year': 1, '_id.month': 1 }
+    }
+  ]);
+
+  // Create array of all months
+  const result: RevenueData[] = [];
+  
+  for (let i = 0; i < months; i++) {
+    const date = new Date(now.getFullYear(), now.getMonth() - months + 1 + i, 1);
+    const monthData = revenueData.find(
+      d => d._id.year === date.getFullYear() && d._id.month === date.getMonth() + 1
+    );
+
+    result.push({
+      month: monthNames[date.getMonth()],
+      revenue: monthData?.revenue || 0
+    });
+  }
+
+  // Calculate projection
+  const historicalRevenues = result.filter(r => r.revenue && r.revenue > 0);
+  if (historicalRevenues.length >= 3) {
+    const avgGrowth = historicalRevenues.reduce((acc, curr, idx) => {
+      if (idx === 0) return 0;
+      return acc + (curr.revenue! - historicalRevenues[idx - 1].revenue!);
+    }, 0) / (historicalRevenues.length - 1);
+
+    const lastRevenue = historicalRevenues[historicalRevenues.length - 1].revenue!;
+    result.forEach((item, idx) => {
+      if (!item.revenue || item.revenue === 0) {
+        const monthsAhead = idx - historicalRevenues.length + 1;
+        item.projection = Math.round(lastRevenue + (avgGrowth * monthsAhead));
+      } else {
+        item.projection = item.revenue;
+      }
+    });
+  }
+
+  return result;
+};
+
+const getAdminSystemMetrics = async (): Promise<SystemMetrics> => {
+  // Average delivery time (based on statusLogs)
+  const deliveredParcels = await Parcel.find({
+    currentStatus: ParcelStatus.DELIVERED,
+  }).select('createdAt statusLogs');
+
+  let totalDeliveryTime = 0;
+  let validDeliveries = 0;
+
+  deliveredParcels.forEach(parcel => {
+    const deliveredLog = parcel.statusLogs?.find(
+      log => log.status === ParcelStatus.DELIVERED
+    );
+    if (deliveredLog) {
+      const deliveryTime = deliveredLog.timestamp.getTime() - parcel.createdAt!.getTime();
+      totalDeliveryTime += deliveryTime;
+      validDeliveries++;
+    }
+  });
+
+  const avgDeliveryTimeMs = validDeliveries > 0 ? totalDeliveryTime / validDeliveries : 0;
+  const avgDeliveryDays = (avgDeliveryTimeMs / (1000 * 60 * 60 * 24)).toFixed(1);
+
+  // Success rate
+  const totalParcels = await Parcel.countDocuments();
+  const successfulDeliveries = await Parcel.countDocuments({ 
+    currentStatus: ParcelStatus.DELIVERED 
+  });
+  const successRate = totalParcels > 0
+    ? ((successfulDeliveries / totalParcels) * 100).toFixed(1)
+    : '0';
+
+  // Peak hours
+  const hourlyDistribution = await Parcel.aggregate([
+    {
+      $group: {
+        _id: { $hour: '$createdAt' },
+        count: { $sum: 1 }
+      }
+    },
+    {
+      $sort: { count: -1 }
+    },
+    {
+      $limit: 1
+    }
+  ]);
+
+  const peakHour = hourlyDistribution[0]?._id || 14;
+  const peakHours = `${peakHour % 12 || 12}-${(peakHour + 2) % 12 || 12} ${peakHour >= 12 ? 'PM' : 'AM'}`;
+
+  // Active users now
+  const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+  const activeNow = await User.countDocuments({
+    lastLoginAt: { $gte: oneHourAgo }
+  });
+
+  return {
+    avgDeliveryTime: `${avgDeliveryDays} days`,
+    successRate: `${successRate}%`,
+    peakHours,
+    activeNow
+  };
+};
+
+export const dashboardService = {
+  // Receiver methods
+  getReceiverDashboardStats,
+  getIncomingParcels,
+  
+  // Admin methods
+  getAdminOverviewStats,
+  getAdminParcelTrends,
+  getAdminDistrictDistribution,
+  getAdminRevenueGrowth,
+  getAdminSystemMetrics
+};

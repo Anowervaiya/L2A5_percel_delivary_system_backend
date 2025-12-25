@@ -3,7 +3,7 @@ import { UserRoutes } from '../modules/user/user.routes';
 import { AuthRoutes } from '../modules/auth/auth.route';
 import { PercelRout } from '../modules/percel/percel.route';
 import { OtpRoutes } from '../modules/otp/otp.route';
-import { dashboardRout } from '../modules/dashboard/dashboard.route';
+import { dashboardRoute } from '../modules/dashboard/dashboard.route';
 
 
 export const router = Router();
@@ -28,7 +28,7 @@ const moduleRoutes = [
 
   {
       path: "/dashboard",
-      route: dashboardRout
+      route: dashboardRoute
   },
 ];
 

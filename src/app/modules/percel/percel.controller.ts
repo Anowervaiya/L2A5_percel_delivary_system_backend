@@ -133,27 +133,78 @@ const allParcel = catchAsync(async (req, res) => {
 });
 
 
-const ParcelByTrackingId = catchAsync(
-  async (req: Request, res: Response, next: NextFunction) => {
-    const trackingId = req.params.trackingId;
-    const parcel = await ParcelService.ParcelByTrackingId(trackingId);
+const trackParcel = catchAsync(async (req: Request, res: Response) => {
+  const { trackingId } = req.params;
 
-    sendResponse(res, {
+  const parcel = await ParcelService.trackParcelByTrackingId(trackingId);
+
+  if (!parcel) {
+    return sendResponse(res, {
+      statusCode: httpStatus.NOT_FOUND,
+      success: false,
+      message: 'Parcel not found with this tracking ID',
+      data: null,
+    });
+  }
+
+  // Check if parcel is blocked
+  if (parcel.isBlocked) {
+    return sendResponse(res, {
+      statusCode: httpStatus.FORBIDDEN,
+      success: false,
+      message: 'This parcel has been blocked',
+      data: null,
+    });
+  }
+
+  // Check if parcel is cancelled
+  if (parcel.isCancelled) {
+    return sendResponse(res, {
+      statusCode: httpStatus.OK,
       success: true,
-      statusCode: httpStatus.ACCEPTED,
-      message: 'parcel retrieved succussfully',
+      message: 'This parcel has been cancelled',
       data: parcel,
     });
   }
-);
 
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Parcel tracking information retrieved successfully',
+    data: parcel,
+  });
+});
+
+// Get all status logs for a parcel
+const getStatusHistory = catchAsync(async (req: Request, res: Response) => {
+  const { trackingId } = req.params;
+
+  const statusLogs = await ParcelService.getParcelStatusHistory(trackingId);
+
+  if (!statusLogs) {
+    return sendResponse(res, {
+      statusCode: httpStatus.NOT_FOUND,
+      success: false,
+      message: 'Parcel not found',
+      data: null,
+    });
+  }
+
+  sendResponse(res, {
+    statusCode: httpStatus.OK,
+    success: true,
+    message: 'Status history retrieved successfully',
+    data: statusLogs,
+  });
+});
 
 export const ParcelController = {
   createParcel,
   cancelParcel,
   changeParcelStatus,
   myParcel,
-  ParcelByTrackingId,
+  trackParcel,
+  getStatusHistory,
   allParcel,
   confirmParcel,
   deleteParcel,

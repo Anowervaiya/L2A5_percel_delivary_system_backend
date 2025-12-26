@@ -227,9 +227,26 @@ const allParcel = async (query: any) => {
 };
 
 
-const ParcelByTrackingId = async (trackingId: string) => {
-  const parcel = await Parcel.findOne({ trackingId: trackingId });
+// Track parcel by tracking ID
+const trackParcelByTrackingId = async (trackingId: string) => {
+  const parcel = await Parcel.findOne({ trackingId });
+
+  if (!parcel) {
+    return null;
+  }
+
   return parcel;
+};
+
+// Get all status logs for a parcel
+const getParcelStatusHistory = async (trackingId: string) => {
+  const parcel = await Parcel.findOne({ trackingId }).select('statusLogs trackingId');
+
+  if (!parcel) {
+    return null;
+  }
+
+  return parcel.statusLogs;
 };
 
 const deleteParcel = async (id: string) => {
@@ -250,7 +267,8 @@ export const ParcelService = {
   cancelParcel,
   changeParcelStatus,
   myParcel,
-  ParcelByTrackingId,
+  trackParcelByTrackingId,
+  getParcelStatusHistory,
   allParcel,
   confirmParcel,
   deleteParcel,

@@ -27,11 +27,9 @@ router.get(
   ParcelController.finterParcelByStatus
 );
 
-router.get(
-  '/track/:trackingId',
-  checkAuth(...Object.values(Role)),
-  ParcelController.ParcelByTrackingId
-);
+router.get('/track/:trackingId', ParcelController.trackParcel);
+router.get('/track-history/:trackingId', ParcelController.getStatusHistory);
+
 
 router.patch(
   '/cancel/:id',
